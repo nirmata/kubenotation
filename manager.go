@@ -20,6 +20,8 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"os"
+
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,7 +33,6 @@ import (
 	"github.com/go-logr/logr"
 	notationv1alpha1 "github.com/nirmata/kubenotation/api/v1alpha1"
 	"github.com/nirmata/kubenotation/internal/controller"
-	"github.com/pkg/errors"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -46,8 +47,9 @@ func init() {
 	//+kubebuilder:scaffold:scheme
 }
 
-func Start(logger logr.Logger, metricsAddr string, probeAddr string, enableLeaderElection bool) error {
+func Start(logger logr.Logger, metricsAddr string, probeAddr string, enableLeaderElection bool) {
 	ctrl.SetLogger(logger)
+	logger = logger.WithName("setup")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -69,34 +71,38 @@ func Start(logger logr.Logger, metricsAddr string, probeAddr string, enableLeade
 		// LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
-		return errors.Wrap(err, "unable to start manager")
+		logger.Error(err, "unable to start manager")
+		os.Exit(1)
 	}
 
 	if err = (&controller.TrustPolicyReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		return errors.Wrap(err, "unable to create controller controller TrustPolicy")
+		logger.Error(err, "unable to create controller", "controller", "TrustPolicy")
+		os.Exit(1)
 	}
 	if err = (&controller.TrustStoreReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		return errors.Wrap(err, "unable to create controller controller TrustStore")
+		logger.Error(err, "unable to create controller", "controller", "TrustStore")
+		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		return errors.Wrap(err, "unable to set up health check")
+		logger.Error(err, "unable to set up health check")
+		os.Exit(1)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		return errors.Wrap(err, "unable to set up ready check")
+		logger.Error(err, "unable to set up ready check")
+		os.Exit(1)
 	}
 
 	logger.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		return errors.Wrap(err, "problem running manager")
+		logger.Error(err, "problem running manager")
+		os.Exit(1)
 	}
-
-	return nil
 }
