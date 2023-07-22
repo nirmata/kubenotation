@@ -20,7 +20,6 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	"os"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
@@ -33,6 +32,7 @@ import (
 	"github.com/go-logr/logr"
 	notationv1alpha1 "github.com/nirmata/kubenotation/api/v1alpha1"
 	"github.com/nirmata/kubenotation/internal/controller"
+	"github.com/pkg/errors"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -47,7 +47,7 @@ func init() {
 	//+kubebuilder:scaffold:scheme
 }
 
-func Start(logger logr.Logger, metricsAddr string, probeAddr string, enableLeaderElection bool) {
+func Start(logger logr.Logger, metricsAddr string, probeAddr string, enableLeaderElection bool) error {
 	ctrl.SetLogger(logger)
 	logger = logger.WithName("setup")
 
@@ -72,7 +72,7 @@ func Start(logger logr.Logger, metricsAddr string, probeAddr string, enableLeade
 	})
 	if err != nil {
 		logger.Error(err, "unable to start manager")
-		os.Exit(1)
+		return errors.Wrapf(err, "unable to start manager")
 	}
 
 	if err = (&controller.TrustPolicyReconciler{
@@ -80,29 +80,31 @@ func Start(logger logr.Logger, metricsAddr string, probeAddr string, enableLeade
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error(err, "unable to create controller", "controller", "TrustPolicy")
-		os.Exit(1)
+		return errors.Wrapf(err, "unable to create controller TrustPolicy")
 	}
 	if err = (&controller.TrustStoreReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error(err, "unable to create controller", "controller", "TrustStore")
-		os.Exit(1)
+		return errors.Wrapf(err, "unable to create controller TrustStore")
 	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		logger.Error(err, "unable to set up health check")
-		os.Exit(1)
+		return errors.Wrapf(err, "unable to set up health check")
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		logger.Error(err, "unable to set up ready check")
-		os.Exit(1)
+		return errors.Wrapf(err, "unable to set up ready check")
 	}
 
 	logger.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		logger.Error(err, "problem running manager")
-		os.Exit(1)
+		return errors.Wrapf(err, "problem running manager")
 	}
+
+	return nil
 }
